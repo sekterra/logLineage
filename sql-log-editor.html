@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SQL 로그 매핑 &amp; Pretty 에디터</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #0f172a;
+    --code-text: #e2e8f0;
+    --error-bg: #fef2f2;
+    --error-border: #fecaca;
+    --error-text: #b91c1c;
+    --badge-bg: #eef2ff;
+    --badge-text: #3730a3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 20px 28px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 14px;
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  textarea {
+    width: 100%;
+    min-height: 340px;
+    resize: vertical;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: #fafbfc;
+    color: var(--text);
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary {
+    background: #eef1f5;
+    color: var(--text);
+  }
+  .btn-secondary:hover { background: #e2e6eb; }
+  .btn-copy {
+    background: #eef1f5;
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+  .btn-copy:hover { background: #e2e6eb; }
+  .btn-copy.copied {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 620px;
+    overflow-y: auto;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8f9fb;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    gap: 8px;
+  }
+  .badge {
+    display: inline-block;
+    background: var(--badge-bg);
+    color: var(--badge-text);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-right: 6px;
+  }
+  pre.sql {
+    margin: 0;
+    padding: 14px;
+    background: var(--code-bg);
+    color: var(--code-text);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  details {
+    border-top: 1px solid var(--border);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .param-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .param-table th, .param-table td {
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px 4px;
+  }
+  .error-box {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    color: var(--error-text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .mode-note {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  footer {
+    padding: 10px 28px 30px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SQL 로그 매핑 &amp; Pretty 에디터</h1>
+  <p>MyBatis 로그(<code>==&gt; Preparing / ==&gt; Parameters</code>)를 붙여넣으면 파라미터를 자동으로 바인딩하고, 순수 SQL만 붙여넣으면 바로 Pretty Print 합니다. 서버·외부 라이브러리 없이 이 파일 하나로 동작합니다.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <h2>1. 입력</h2>
+    <textarea id="logInput" placeholder="아래 둘 중 하나를 그대로 붙여넣으세요.
+
+[1] MyBatis 로그 원문
+==&gt;  Preparing: SELECT * FROM user WHERE id = ? AND name = ?
+==&gt; Parameters: 1(Long), John(String)
+
+[2] 순수 SQL 구문
+SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
+    <div class="actions">
+      <button class="btn-primary" id="convertBtn">변환</button>
+      <button class="btn-secondary" id="clearBtn">지우기</button>
+      <button class="btn-secondary" id="sampleLogBtn">로그 예시</button>
+      <button class="btn-secondary" id="sampleSqlBtn">SQL 예시</button>
+    </div>
+    <div id="errorBox"></div>
+    <div class="mode-note">입력에 <code>==&gt; Preparing</code> 패턴이 있으면 자동으로 "로그 매핑 모드"로, 없으면 "SQL Pretty 모드"로 동작합니다.</div>
+  </div>
+
+  <div class="panel">
+    <h2>2. 결과</h2>
+    <div class="result-list" id="resultList">
+      <div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  로컬에서만 동작하며 입력한 내용은 어디로도 전송되지 않습니다. (외부 네트워크 요청 없음)
+</footer>
+
+<script>
+/* ===================== SQL Pretty Formatter (dpriver.com 스타일 근사 구현) ===================== */
+(function (global) {
+
+  const CLAUSE_KEYWORDS_RAW = [
+    'GROUP BY', 'ORDER BY', 'INSERT INTO', 'DELETE FROM',
+    'LEFT OUTER JOIN', 'RIGHT OUTER JOIN', 'FULL OUTER JOIN',
+    'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'FULL JOIN', 'CROSS JOIN',
+    'UNION ALL',
+    'SELECT', 'FROM', 'WHERE', 'HAVING', 'VALUES', 'UPDATE', 'SET',
+    'LIMIT', 'JOIN', 'ON', 'UNION'
+  ];
+  const CLAUSE_KEYWORDS = [...CLAUSE_KEYWORDS_RAW].sort(
+    (a, b) => b.split(' ').length - a.split(' ').length
+  );
+  const CLAUSE_KEYWORD_SET = new Set(CLAUSE_KEYWORDS.map(k => k.toUpperCase()));
+  const COND_SEPARATORS = new Set(['AND', 'OR']);
+  const COMMA_LIST_CLAUSES = new Set(['SELECT', 'FROM', 'GROUP BY', 'ORDER BY', 'VALUES', 'SET']);
+  const COND_LIST_CLAUSES = new Set(['WHERE', 'HAVING', 'ON']);
+  const JOIN_CLAUSES = new Set([
+    'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'FULL JOIN', 'CROSS JOIN',
+    'LEFT OUTER JOIN', 'RIGHT OUTER JOIN', 'FULL OUTER JOIN'
+  ]);
+
+  function tokenize(sql) {
+    const tokens = [];
+    let i = 0;
+    const n = sql.length;
+    const isWordChar = (c) => /[A-Za-z0-9_#$.:@]/.test(c);
+    const isOpChar = (c) => /[=<>!+\-*/|~%^]/.test(c);
+
+    while (i < n) {
+      const c = sql[i];
+      if (/\s/.test(c)) { i++; continue; }
+
+      if (c === '-' && sql[i + 1] === '-') {
+        let j = i;
+        while (j < n && sql[j] !== '\n') j++;
+        i = j;
+        continue;
+      }
+      if (c === '/' && sql[i + 1] === '*') {
+        let j = i + 2;
+        while (j < n && !(sql[j] === '*' && sql[j + 1] === '/')) j++;
+        i = j + 2;
+        continue;
+      }
+      if (c === "'") {
+        let j = i + 1;
+        let val = "'";
+        while (j < n) {
+          if (sql[j] === "'" && sql[j + 1] === "'") { val += "''"; j += 2; continue; }
+          if (sql[j] === "'") { val += "'"; j++; break; }
+          val += sql[j]; j++;
+        }
+        tokens.push({ type: 'string', value: val });
+        i = j;
+        continue;
+      }
+      if (c === '"') {
+        let j = i + 1;
+        let val = '"';
+        while (j < n && sql[j] !== '"') { val += sql[j]; j++; }
+        val += '"';
+        tokens.push({ type: 'ident', value: val });
+        i = j + 1;
+        continue;
+      }
+      if (c === '(' || c === ')' || c === ',' || c === ';') {
+        tokens.push({ type: c === ',' ? 'comma' : (c === '(' ? 'lparen' : (c === ')' ? 'rparen' : 'semi')), value: c });
+        i++;
+        continue;
+      }
+      if (isOpChar(c)) {
+        let j = i;
+        while (j < n && isOpChar(sql[j])) j++;
+        tokens.push({ type: 'op', value: sql.slice(i, j) });
+        i = j;
+        continue;
+      }
+      if (isWordChar(c)) {
+        let j = i;
+        while (j < n && isWordChar(sql[j])) j++;
+        tokens.push({ type: 'word', value: sql.slice(i, j) });
+        i = j;
+        continue;
+      }
+      tokens.push({ type: 'op', value: c });
+      i++;
+    }
+    return mergeKeywords(tokens);
+  }
+
+  function mergeKeywords(tokens) {
+    const out = [];
+    let i = 0;
+    while (i < tokens.length) {
+      let matched = false;
+      for (const kw of CLAUSE_KEYWORDS) {
+        const parts = kw.split(' ');
+        if (i + parts.length <= tokens.length) {
+          let ok = true;
+          for (let k = 0; k < parts.length; k++) {
+            const t = tokens[i + k];
+            if (!(t.type === 'word' && t.value.toUpperCase() === parts[k])) { ok = false; break; }
+          }
+          if (ok) {
+            out.push({ type: 'kw', value: kw });
+            i += parts.length;
+            matched = true;
+            break;
+          }
+        }
+      }
+      if (matched) continue;
+      const t = tokens[i];
+      if (t.type === 'word' && COND_SEPARATORS.has(t.value.toUpperCase())) {
+        out.push({ type: 'cond', value: t.value.toUpperCase() });
+      } else {
+        out.push(t);
+      }
+      i++;
+    }
+    return out;
+  }
+
+  function splitTopLevel(tokens, predicate) {
+    const segments = [];
+    let depth = 0;
+    let current = [];
+    for (const t of tokens) {
+      if (t.type === 'lparen') depth++;
+      if (t.type === 'rparen') depth--;
+      if (depth === 0 && predicate(t)) {
+        segments.push(current);
+        current = [];
+        continue;
+      }
+      current.push(t);
+    }
+    segments.push(current);
+    return { segments };
+  }
+
+  function findClauseSegments(tokens) {
+    const result = [];
+    let depth = 0;
+    let currentKeyword = null;
+    let currentBody = [];
+    const leading = [];
+    for (const t of tokens) {
+      if (t.type === 'lparen') depth++;
+      if (t.type === 'rparen') depth--;
+      if (depth === 0 && t.type === 'kw' && CLAUSE_KEYWORD_SET.has(t.value.toUpperCase())) {
+        if (currentKeyword) {
+          result.push({ keyword: currentKeyword, body: currentBody });
+        } else if (currentBody.length) {
+          leading.push(...currentBody);
+        }
+        currentKeyword = t.value.toUpperCase();
+        currentBody = [];
+        continue;
+      }
+      currentBody.push(t);
+    }
+    if (currentKeyword) {
+      result.push({ keyword: currentKeyword, body: currentBody });
+    } else if (currentBody.length) {
+      leading.push(...currentBody);
+    }
+    return { leading, clauses: result };
+  }
+
+  function tokenText(t) { return t.value; }
+
+  function renderExpr(tokens, indent) {
+    if (tokens.length === 0) return '';
+    let out = '';
+    let i = 0;
+    let prevType = null;
+
+    while (i < tokens.length) {
+      const t = tokens[i];
+      if (t.type === 'lparen') {
+        let depth = 1, j = i + 1;
+        while (j < tokens.length && depth > 0) {
+          if (tokens[j].type === 'lparen') depth++;
+          if (tokens[j].type === 'rparen') depth--;
+          if (depth === 0) break;
+          j++;
+        }
+        const inner = tokens.slice(i + 1, j);
+        const hasSelect = isTopLevelSelect(inner);
+
+        if (hasSelect) {
+          const prefixLen = out.length;
+          const subIndent = indent + prefixLen + 1;
+          const subLines = formatStatement(inner, subIndent);
+          if (subLines.length === 1) {
+            out += '(' + subLines[0].trim() + ')';
+          } else {
+            out += '(' + subLines[0].trimStart();
+            for (let k = 1; k < subLines.length; k++) out += '\n' + subLines[k];
+            out += ')';
+          }
+        } else {
+          out += '(' + renderExpr(inner, indent) + ')';
+        }
+        i = j + 1;
+        prevType = 'rparen';
+        continue;
+      }
+      out += joinToken(out, prevType, t);
+      prevType = t.type === 'kw' ? 'kw' : t.type;
+      i++;
+    }
+    return out;
+  }
+
+  function isTopLevelSelect(tokens) {
+    let depth = 0;
+    for (const t of tokens) {
+      if (t.type === 'lparen') { depth++; continue; }
+      if (t.type === 'rparen') { depth--; continue; }
+      if (depth === 0) return t.type === 'kw' && t.value === 'SELECT';
+    }
+    return false;
+  }
+
+  function joinToken(out, prevType, t) {
+    const val = t.type === 'kw' ? t.value : tokenText(t);
+    if (out === '') return val;
+    if (t.type === 'comma') return val;
+    if (prevType === 'lparen') return val;
+    const lastCh = out[out.length - 1];
+    if (lastCh === '(') return val;
+    return ' ' + val;
+  }
+
+  function renderCommaList(tokens, indent) {
+    const { segments } = splitTopLevel(tokens, t => t.type === 'comma');
+    return segments
+      .filter(seg => seg.length > 0)
+      .map(seg => renderExpr(seg, indent).trim());
+  }
+
+  function renderCondList(tokens, indent) {
+    let depth = 0;
+    let current = [];
+    let sep = null;
+    const out = [];
+    for (const t of tokens) {
+      if (t.type === 'lparen') depth++;
+      if (t.type === 'rparen') depth--;
+      if (depth === 0 && t.type === 'cond') {
+        out.push({ sep, tokens: current });
+        sep = t.value;
+        current = [];
+        continue;
+      }
+      current.push(t);
+    }
+    out.push({ sep, tokens: current });
+    return out.map(item => ({ sep: item.sep, text: renderExpr(item.tokens, indent).trim() }))
+               .filter(item => item.text.length > 0);
+  }
+
+  function pad(keyword) {
+    const w = Math.max(9, keyword.length + 1);
+    return keyword + ' '.repeat(w - keyword.length);
+  }
+
+  function indentStr(n) { return ' '.repeat(Math.max(0, n)); }
+
+  function formatStatement(tokens, indent) {
+    const { leading, clauses } = findClauseSegments(tokens);
+    const lines = [];
+    const base = indentStr(indent);
+
+    if (leading.length) {
+      lines.push(base + renderExpr(leading, indent).trim());
+    }
+
+    clauses.forEach(({ keyword, body }) => {
+      if (keyword === 'UNION' || keyword === 'UNION ALL') {
+        lines.push(base + keyword);
+        if (body.length) lines.push(...formatStatement(body, indent));
+        return;
+      }
+      const kwPadded = pad(keyword);
+      const lineIndent = indent + kwPadded.length;
+
+      if (COMMA_LIST_CLAUSES.has(keyword)) {
+        const items = renderCommaList(body, lineIndent);
+        if (items.length === 0) {
+          lines.push(base + kwPadded.trimEnd());
+        } else {
+          items.forEach((item, idx) => {
+            const suffix = idx < items.length - 1 ? ',' : '';
+            if (idx === 0) lines.push(base + kwPadded + item + suffix);
+            else lines.push(indentStr(lineIndent) + item + suffix);
+          });
+        }
+        return;
+      }
+
+      if (COND_LIST_CLAUSES.has(keyword)) {
+        const conds = renderCondList(body, lineIndent);
+        if (conds.length === 0) {
+          lines.push(base + kwPadded.trimEnd());
+        } else {
+          conds.forEach((c, idx) => {
+            if (idx === 0) lines.push(base + kwPadded + c.text);
+            else lines.push(indentStr(lineIndent) + c.sep + ' ' + c.text);
+          });
+        }
+        return;
+      }
+
+      if (JOIN_CLAUSES.has(keyword)) {
+        const text = renderExpr(body, lineIndent).trim();
+        lines.push(base + kwPadded + text);
+        return;
+      }
+
+      const text = renderExpr(body, lineIndent).trim();
+      if (text) lines.push(base + kwPadded + text);
+      else lines.push(base + kwPadded.trimEnd());
+    });
+
+    return lines.length ? lines : [base.trimEnd()];
+  }
+
+  function prettyPrintSqlDpriverStyle(sql) {
+    const tokens = tokenize(sql);
+    const { segments } = splitTopLevel(tokens, t => t.type === 'semi');
+    const statementsOut = segments
+      .filter(seg => seg.length > 0)
+      .map(seg => formatStatement(seg, 0).join('\n'));
+    return statementsOut.join('\n;\n\n');
+  }
+
+  global.SqlPretty = { prettyPrintSqlDpriverStyle };
+})(window);
+</script>
+
+<script>
+(function () {
+  const logInput = document.getElementById('logInput');
+  const resultList = document.getElementById('resultList');
+  const errorBox = document.getElementById('errorBox');
+  const convertBtn = document.getElementById('convertBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const sampleLogBtn = document.getElementById('sampleLogBtn');
+  const sampleSqlBtn = document.getElementById('sampleSqlBtn');
+
+  const SAMPLE_LOG = [
+    '2024-01-15 10:23:45.123 DEBUG 12345 --- [http-nio-8080-exec-1] c.e.mapper.UserMapper.selectUser  : ==>  Preparing: SELECT id, name, email, created_at FROM user WHERE id = ? AND status = ? AND name LIKE ?',
+    '2024-01-15 10:23:45.125 DEBUG 12345 --- [http-nio-8080-exec-1] c.e.mapper.UserMapper.selectUser  : ==> Parameters: 1001(Long), ACTIVE(String), %kim%(String)',
+    '2024-01-15 10:23:46.001 DEBUG 12345 --- [http-nio-8080-exec-2] c.e.mapper.OrderMapper.insertOrder  : ==>  Preparing: INSERT INTO orders (user_id, amount, memo, created_at) VALUES (?, ?, ?, ?)',
+    '2024-01-15 10:23:46.002 DEBUG 12345 --- [http-nio-8080-exec-2] c.e.mapper.OrderMapper.insertOrder  : ==> Parameters: 1001(Long), 25000(BigDecimal), null(String), 2024-01-15 10:23:46.0(Timestamp)'
+  ].join('\n');
+
+  const SAMPLE_SQL = "SELECT u.id, u.name, o.amount FROM user u LEFT JOIN orders o ON u.id = o.user_id WHERE u.status = 'ACTIVE' AND o.amount > 1000 ORDER BY u.id";
+
+  sampleLogBtn.addEventListener('click', () => { logInput.value = SAMPLE_LOG; });
+  sampleSqlBtn.addEventListener('click', () => { logInput.value = SAMPLE_SQL; });
+
+  clearBtn.addEventListener('click', () => {
+    logInput.value = '';
+    errorBox.innerHTML = '';
+    resultList.innerHTML = '<div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>';
+  });
+
+  convertBtn.addEventListener('click', runConvert);
+
+  function runConvert() {
+    errorBox.innerHTML = '';
+    const raw = logInput.value;
+    if (!raw.trim()) {
+      resultList.innerHTML = '<div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>';
+      return;
+    }
+
+    const isLogFormat = /==>\s*Preparing:/.test(raw);
+    resultList.innerHTML = '';
+
+    if (isLogFormat) {
+      const blocks = extractBlocks(raw);
+      if (blocks.length === 0) {
+        errorBox.innerHTML = '<div class="error-box">"==&gt; Preparing:" 패턴을 찾았지만 SQL을 추출하지 못했습니다. 로그 형식을 확인해주세요.</div>';
+        return;
+      }
+      blocks.forEach((block, idx) => {
+        const params = block.paramLine ? parseParameters(block.paramLine) : [];
+        const bindResult = bindParameters(block.sql, params);
+        let pretty;
+        try {
+          pretty = window.SqlPretty.prettyPrintSqlDpriverStyle(bindResult.sql);
+        } catch (e) {
+          pretty = bindResult.sql;
+        }
+        renderCard({
+          badge: '로그 매핑',
+          title: `쿼리 #${idx + 1}` + (bindResult.mismatch ? ` — ⚠ 파라미터 개수 불일치 (? ${bindResult.qCount}개 / 파라미터 ${params.length}개)` : ''),
+          pretty,
+          rawSql: block.sql,
+          params
+        });
+      });
+    } else {
+      // 순수 SQL Pretty 모드 (세미콜론으로 구분된 여러 statement는 SqlPretty가 내부적으로 처리)
+      let pretty;
+      try {
+        pretty = window.SqlPretty.prettyPrintSqlDpriverStyle(raw.trim());
+      } catch (e) {
+        pretty = raw.trim();
+      }
+      renderCard({
+        badge: 'SQL Pretty',
+        title: 'Pretty 결과',
+        pretty,
+        rawSql: raw.trim(),
+        params: []
+      });
+    }
+  }
+
+  function renderCard({ badge, title, pretty, rawSql, params }) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const head = document.createElement('div');
+    head.className = 'card-head';
+    const label = document.createElement('span');
+    label.innerHTML = `<span class="badge">${escapeHtml(badge)}</span>${escapeHtml(title)}`;
+    head.appendChild(label);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn-copy';
+    copyBtn.textContent = '복사';
+    copyBtn.addEventListener('click', () => {
+      copyToClipboard(pretty, copyBtn);
+    });
+    head.appendChild(copyBtn);
+
+    const pre = document.createElement('pre');
+    pre.className = 'sql';
+    pre.textContent = pretty;
+
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = '원본 SQL' + (params.length ? ' / 파라미터 보기' : ' 보기');
+    details.appendChild(summary);
+
+    const rawSqlDiv = document.createElement('div');
+    rawSqlDiv.style.marginTop = '8px';
+    rawSqlDiv.innerHTML = '<strong>원본 SQL</strong>';
+    const rawSqlPre = document.createElement('pre');
+    rawSqlPre.style.whiteSpace = 'pre-wrap';
+    rawSqlPre.style.fontSize = '12px';
+    rawSqlPre.style.background = 'transparent';
+    rawSqlPre.style.color = 'inherit';
+    rawSqlPre.style.padding = '4px 0';
+    rawSqlPre.textContent = rawSql;
+    rawSqlDiv.appendChild(rawSqlPre);
+    details.appendChild(rawSqlDiv);
+
+    if (params.length > 0) {
+      const table = document.createElement('table');
+      table.className = 'param-table';
+      table.innerHTML = '<tr><th>#</th><th>값</th><th>타입</th></tr>' +
+        params.map((p, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(p.value)}</td><td>${escapeHtml(p.type)}</td></tr>`).join('');
+      details.appendChild(table);
+    }
+
+    card.appendChild(head);
+    card.appendChild(pre);
+    card.appendChild(details);
+    resultList.appendChild(card);
+  }
+
+  function copyToClipboard(text, btn) {
+    const done = () => {
+      const original = '복사';
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    document.body.removeChild(ta);
+    done();
+  }
+
+  // ---- 로그 파싱 로직 ----
+
+  function extractBlocks(raw) {
+    const lines = raw.split(/\r?\n/);
+    const blocks = [];
+    let current = null;
+    for (const line of lines) {
+      const prepMatch = line.match(/==>\s*Preparing:\s*(.+)$/);
+      const paramMatch = line.match(/==>\s*Parameters:\s*(.*)$/);
+      if (prepMatch) {
+        if (current) blocks.push(current);
+        current = { sql: prepMatch[1].trim(), paramLine: null };
+      } else if (paramMatch && current) {
+        current.paramLine = paramMatch[1].trim();
+      }
+    }
+    if (current) blocks.push(current);
+    return blocks;
+  }
+
+  function parseParameters(paramLine) {
+    if (!paramLine) return [];
+    const results = [];
+    const re = /([^()]*?)\(([\w.$]+)\)\s*(?:,|$)/g;
+    let m;
+    while ((m = re.exec(paramLine)) !== null) {
+      let val = m[1].trim();
+      if (val.startsWith(',')) val = val.slice(1).trim();
+      results.push({ value: val, type: m[2] });
+    }
+    return results;
+  }
+
+  const NUMERIC_TYPES = new Set([
+    'Long', 'Integer', 'Int', 'Short', 'Byte', 'Double', 'Float',
+    'BigDecimal', 'BigInteger', 'long', 'int', 'short', 'byte', 'double', 'float'
+  ]);
+  const BOOLEAN_TYPES = new Set(['Boolean', 'boolean']);
+
+  function formatValueForSql(value, type) {
+    if (value === undefined || value === null) return 'NULL';
+    if (/^null$/i.test(value.trim())) return 'NULL';
+    if (BOOLEAN_TYPES.has(type)) return /^true$/i.test(value.trim()) ? 'TRUE' : 'FALSE';
+    if (NUMERIC_TYPES.has(type)) return value.trim();
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+
+  function bindParameters(sql, params) {
+    const qCount = (sql.match(/\?/g) || []).length;
+    let i = 0;
+    const bound = sql.replace(/\?/g, () => {
+      if (i < params.length) {
+        const p = params[i++];
+        return formatValueForSql(p.value, p.type);
+      }
+      i++;
+      return '?';
+    });
+    return { sql: bound, mismatch: qCount !== params.length, qCount };
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+})();
+</script>
+
+</body>
+</html>
