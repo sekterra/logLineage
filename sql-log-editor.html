@@ -41,12 +41,17 @@
     color: var(--muted);
     font-size: 13px;
   }
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
   .layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
     padding: 20px 28px;
     align-items: start;
+    max-width: 100%;
   }
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }
@@ -56,6 +61,19 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 16px;
+    /* 그리드 트랙이 내부 긴 SQL 한 줄 때문에 늘어나지 않도록 고정 */
+    min-width: 0;
+    max-width: 100%;
+  }
+  .panel-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+  .panel-header-row h2 {
+    margin: 0;
   }
   .panel h2 {
     font-size: 14px;
@@ -67,6 +85,7 @@
   }
   textarea {
     width: 100%;
+    max-width: 100%;
     min-height: 340px;
     resize: vertical;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -119,11 +138,14 @@
     gap: 14px;
     max-height: 620px;
     overflow-y: auto;
+    min-width: 0;
   }
   .card {
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
   }
   .card-head {
     display: flex;
@@ -156,6 +178,7 @@
     line-height: 1.6;
     white-space: pre;
     overflow-x: auto;
+    max-width: 100%;
   }
   details {
     border-top: 1px solid var(--border);
@@ -233,7 +256,10 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
   </div>
 
   <div class="panel">
-    <h2>2. 결과</h2>
+    <div class="panel-header-row">
+      <h2>2. 결과</h2>
+      <button class="btn-secondary btn-copy" id="copyAllBtn" style="display:none;">전체 복사</button>
+    </div>
     <div class="result-list" id="resultList">
       <div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>
     </div>
@@ -599,6 +625,9 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
   const clearBtn = document.getElementById('clearBtn');
   const sampleLogBtn = document.getElementById('sampleLogBtn');
   const sampleSqlBtn = document.getElementById('sampleSqlBtn');
+  const copyAllBtn = document.getElementById('copyAllBtn');
+
+  let currentResults = [];
 
   const SAMPLE_LOG = [
     '2024-01-15 10:23:45.123 DEBUG 12345 --- [http-nio-8080-exec-1] c.e.mapper.UserMapper.selectUser  : ==>  Preparing: SELECT id, name, email, created_at FROM user WHERE id = ? AND status = ? AND name LIKE ?',
@@ -616,6 +645,13 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
     logInput.value = '';
     errorBox.innerHTML = '';
     resultList.innerHTML = '<div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>';
+    currentResults = [];
+    copyAllBtn.style.display = 'none';
+  });
+
+  copyAllBtn.addEventListener('click', () => {
+    const combined = currentResults.join('\n\n---\n\n');
+    copyToClipboard(combined, copyAllBtn, '전체 복사');
   });
 
   convertBtn.addEventListener('click', runConvert);
@@ -623,8 +659,10 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
   function runConvert() {
     errorBox.innerHTML = '';
     const raw = logInput.value;
+    currentResults = [];
     if (!raw.trim()) {
       resultList.innerHTML = '<div class="empty">왼쪽에 로그 또는 SQL을 붙여넣고 변환 버튼을 누르세요.</div>';
+      copyAllBtn.style.display = 'none';
       return;
     }
 
@@ -635,6 +673,7 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
       const blocks = extractBlocks(raw);
       if (blocks.length === 0) {
         errorBox.innerHTML = '<div class="error-box">"==&gt; Preparing:" 패턴을 찾았지만 SQL을 추출하지 못했습니다. 로그 형식을 확인해주세요.</div>';
+        copyAllBtn.style.display = 'none';
         return;
       }
       blocks.forEach((block, idx) => {
@@ -653,6 +692,7 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
           rawSql: block.sql,
           params
         });
+        currentResults.push(pretty);
       });
     } else {
       // 순수 SQL Pretty 모드 (세미콜론으로 구분된 여러 statement는 SqlPretty가 내부적으로 처리)
@@ -669,7 +709,10 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
         rawSql: raw.trim(),
         params: []
       });
+      currentResults.push(pretty);
     }
+
+    copyAllBtn.style.display = currentResults.length > 1 ? 'inline-block' : 'none';
   }
 
   function renderCard({ badge, title, pretty, rawSql, params }) {
@@ -726,9 +769,9 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
     resultList.appendChild(card);
   }
 
-  function copyToClipboard(text, btn) {
+  function copyToClipboard(text, btn, originalLabel) {
+    const original = originalLabel || '복사';
     const done = () => {
-      const original = '복사';
       btn.textContent = '복사됨!';
       btn.classList.add('copied');
       setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1200);
