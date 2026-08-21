@@ -280,7 +280,7 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
     'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'FULL JOIN', 'CROSS JOIN',
     'UNION ALL',
     'SELECT', 'FROM', 'WHERE', 'HAVING', 'VALUES', 'UPDATE', 'SET',
-    'LIMIT', 'JOIN', 'ON', 'UNION'
+    'LIMIT', 'JOIN', 'ON', 'UNION', 'WITH'
   ];
   const CLAUSE_KEYWORDS = [...CLAUSE_KEYWORDS_RAW].sort(
     (a, b) => b.split(' ').length - a.split(' ').length
@@ -559,6 +559,49 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
       if (keyword === 'UNION' || keyword === 'UNION ALL') {
         lines.push(base + keyword);
         if (body.length) lines.push(...formatStatement(body, indent));
+        return;
+      }
+
+      // WITH 절 (CTE): WITH name [AS] ( ... ) [, name2 [AS] ( ... ) ...] 뒤에
+      // 본 SELECT/INSERT/UPDATE/DELETE 문이 이어짐.
+      //   WITH A AS (
+      //   <서브쿼리 포맷>
+      //   )
+      //   ,B AS (
+      //   ...
+      //   )
+      //   SELECT *
+      //   FROM A
+      if (keyword === 'WITH') {
+        const cteSegments = splitCommaSegments(body);
+        cteSegments.forEach((seg, idx) => {
+          let parenIdx = -1;
+          for (let i = 0; i < seg.length; i++) {
+            if (seg[i].type === 'lparen') { parenIdx = i; break; }
+          }
+          const prefix = idx === 0 ? (keyword + ' ') : ',';
+
+          if (parenIdx === -1) {
+            // 괄호 없는 비정상 CTE 정의 — 원본을 그대로 한 줄로 출력
+            lines.push(base + prefix + renderExpr(seg, indent).trim());
+            return;
+          }
+
+          const nameTokens = seg.slice(0, parenIdx);
+          let depth = 1, j = parenIdx + 1;
+          while (j < seg.length && depth > 0) {
+            if (seg[j].type === 'lparen') depth++;
+            if (seg[j].type === 'rparen') depth--;
+            if (depth === 0) break;
+            j++;
+          }
+          const inner = seg.slice(parenIdx + 1, j);
+          const nameText = renderExpr(nameTokens, indent).trim();
+
+          lines.push(base + prefix + nameText + ' (');
+          lines.push(...formatStatement(inner, indent));
+          lines.push(base + ')');
+        });
         return;
       }
 
