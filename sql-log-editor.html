@@ -509,14 +509,15 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
     return ' ' + val;
   }
 
-  function renderCommaList(tokens, indent) {
+  // 콤마로 구분된 세그먼트의 원본 토큰 목록만 반환 (렌더링은 호출부에서, 각 줄의
+  // 실제 시작 위치에 맞는 colOffset으로 renderExpr을 호출하기 위함)
+  function splitCommaSegments(tokens) {
     const { segments } = splitTopLevel(tokens, t => t.type === 'comma');
-    return segments
-      .filter(seg => seg.length > 0)
-      .map(seg => renderExpr(seg, indent).trim());
+    return segments.filter(seg => seg.length > 0);
   }
 
-  function renderCondList(tokens, indent) {
+  // AND/OR로 구분된 조건들의 원본 토큰 목록만 반환
+  function splitCondSegments(tokens) {
     let depth = 0;
     let current = [];
     let sep = null;
@@ -533,17 +534,18 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
       current.push(t);
     }
     out.push({ sep, tokens: current });
-    return out.map(item => ({ sep: item.sep, text: renderExpr(item.tokens, indent).trim() }))
-               .filter(item => item.text.length > 0);
-  }
-
-  function pad(keyword) {
-    const w = Math.max(9, keyword.length + 1);
-    return keyword + ' '.repeat(w - keyword.length);
+    return out.filter(item => item.tokens.length > 0);
   }
 
   function indentStr(n) { return ' '.repeat(Math.max(0, n)); }
 
+  // 스타일: 키워드 뒤 컬럼 정렬(패딩) 없음, 콤마는 다음 줄 맨 앞에 붙는 "콤마 선행" 방식,
+  // AND/OR는 들여쓰기 없이 줄 맨 앞에 위치.
+  //   SELECT A.NAME
+  //   ,B.NAME
+  //   FROM AAA AS A
+  //   WHERE A.TEST = 'TEST'
+  //   AND B.TEST2 = 'TEST2'
   function formatStatement(tokens, indent) {
     const { leading, clauses } = findClauseSegments(tokens);
     const lines = [];
@@ -559,45 +561,51 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
         if (body.length) lines.push(...formatStatement(body, indent));
         return;
       }
-      const kwPadded = pad(keyword);
-      const lineIndent = indent + kwPadded.length;
 
       if (COMMA_LIST_CLAUSES.has(keyword)) {
-        const items = renderCommaList(body, lineIndent);
-        if (items.length === 0) {
-          lines.push(base + kwPadded.trimEnd());
+        const segments = splitCommaSegments(body);
+        if (segments.length === 0) {
+          lines.push(base + keyword);
         } else {
-          items.forEach((item, idx) => {
-            const suffix = idx < items.length - 1 ? ',' : '';
-            if (idx === 0) lines.push(base + kwPadded + item + suffix);
-            else lines.push(indentStr(lineIndent) + item + suffix);
+          segments.forEach((seg, idx) => {
+            if (idx === 0) {
+              // "KEYWORD " 만큼의 실제 시작 열을 서브쿼리 들여쓰기 계산에 반영
+              const colOffset = indent + keyword.length + 1;
+              lines.push(base + keyword + ' ' + renderExpr(seg, colOffset).trim());
+            } else {
+              // ","(콤마 1글자) 만큼의 실제 시작 열을 반영
+              const colOffset = indent + 1;
+              lines.push(base + ',' + renderExpr(seg, colOffset).trim());
+            }
           });
         }
         return;
       }
 
       if (COND_LIST_CLAUSES.has(keyword)) {
-        const conds = renderCondList(body, lineIndent);
+        const conds = splitCondSegments(body);
         if (conds.length === 0) {
-          lines.push(base + kwPadded.trimEnd());
+          lines.push(base + keyword);
         } else {
           conds.forEach((c, idx) => {
-            if (idx === 0) lines.push(base + kwPadded + c.text);
-            else lines.push(indentStr(lineIndent) + c.sep + ' ' + c.text);
+            if (idx === 0) {
+              const colOffset = indent + keyword.length + 1;
+              lines.push(base + keyword + ' ' + renderExpr(c.tokens, colOffset).trim());
+            } else {
+              // "AND "/"OR " 만큼의 실제 시작 열을 반영
+              const colOffset = indent + c.sep.length + 1;
+              lines.push(base + c.sep + ' ' + renderExpr(c.tokens, colOffset).trim());
+            }
           });
         }
         return;
       }
 
-      if (JOIN_CLAUSES.has(keyword)) {
-        const text = renderExpr(body, lineIndent).trim();
-        lines.push(base + kwPadded + text);
-        return;
-      }
-
-      const text = renderExpr(body, lineIndent).trim();
-      if (text) lines.push(base + kwPadded + text);
-      else lines.push(base + kwPadded.trimEnd());
+      // JOIN 계열, INSERT INTO / UPDATE / DELETE FROM / LIMIT 등은 한 줄로
+      const colOffset = indent + keyword.length + 1;
+      const text = renderExpr(body, colOffset).trim();
+      if (text) lines.push(base + keyword + ' ' + text);
+      else lines.push(base + keyword);
     });
 
     return lines.length ? lines : [base.trimEnd()];
