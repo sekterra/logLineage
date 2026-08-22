@@ -178,7 +178,9 @@
     line-height: 1.6;
     white-space: pre;
     overflow-x: auto;
+    overflow-y: auto;
     max-width: 100%;
+    max-height: 420px;
   }
   details {
     border-top: 1px solid var(--border);
@@ -810,7 +812,7 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
       const table = document.createElement('table');
       table.className = 'param-table';
       table.innerHTML = '<tr><th>#</th><th>값</th><th>타입</th></tr>' +
-        params.map((p, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(p.value)}</td><td>${escapeHtml(p.type)}</td></tr>`).join('');
+        params.map((p, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(p.value)}</td><td>${escapeHtml(p.type || '-')}</td></tr>`).join('');
       details.appendChild(table);
     }
 
@@ -866,15 +868,43 @@ SELECT * FROM user WHERE id = 1 AND name = 'John'"></textarea>
     return blocks;
   }
 
+  // 괄호 깊이를 추적하며 최상위(depth 0) 콤마 기준으로만 파라미터를 분리.
+  // MyBatis는 null 값을 타입 표기 없이 그냥 "null"로만 출력하는 경우가 많아서
+  // (예: "null, B000(String)"), 단순히 "(Type)"이 나올 때까지 묶어버리면
+  // "null, B000"이 하나의 값으로 합쳐지는 문제가 있었음. 값 단위로 먼저 나눈 뒤
+  // 각 값에 타입 표기가 있는지 개별적으로 판단하도록 수정.
+  function splitTopLevelParams(line) {
+    const segments = [];
+    let depth = 0;
+    let current = '';
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) {
+        segments.push(current);
+        current = '';
+        continue;
+      }
+      current += ch;
+    }
+    segments.push(current);
+    return segments;
+  }
+
   function parseParameters(paramLine) {
     if (!paramLine) return [];
     const results = [];
-    const re = /([^()]*?)\(([\w.$]+)\)\s*(?:,|$)/g;
-    let m;
-    while ((m = re.exec(paramLine)) !== null) {
-      let val = m[1].trim();
-      if (val.startsWith(',')) val = val.slice(1).trim();
-      results.push({ value: val, type: m[2] });
+    for (const rawSeg of splitTopLevelParams(paramLine)) {
+      const seg = rawSeg.trim();
+      if (!seg) continue;
+      const m = seg.match(/^(.*)\(([\w.$]+)\)$/);
+      if (m) {
+        results.push({ value: m[1].trim(), type: m[2] });
+      } else {
+        // 타입 표기가 없는 값 (예: MyBatis가 null을 "null"로만 출력하는 경우)
+        results.push({ value: seg, type: '' });
+      }
     }
     return results;
   }
